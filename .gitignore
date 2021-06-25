@@ -1,0 +1,5 @@
+./target/*
+.idea/*
+
+cmpt213_a2.iml
+src/resources/*
