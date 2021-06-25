@@ -1,20 +1,16 @@
 package ca.sfu.cmpt213.a2.model;
 
-import javax.imageio.ImageIO;
+import ca.sfu.cmpt213.a2.model.entity.Entity;
+
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.Buffer;
-import java.util.*;
 import java.util.List;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 
 public class Maze {
-    public static final int WIDTH = 20;
+    public static final int WIDTH = 21;
     public static final int HEIGHT = 17;
     private static final ThreadLocalRandom rand = ThreadLocalRandom.current();
 //    private static final Random rand = new Random(1); // seed for debugging
@@ -28,21 +24,21 @@ public class Maze {
     private double numTiles = WIDTH * HEIGHT;
 
     @SafeVarargs
-    private <T> T choice(T... choices) {
+    private static <T> T choice(T... choices) {
         return choices[rand.nextInt(choices.length)];
     }
 
-    private int randrange(int low, int high, int step) {
+    private static int randrange(int low, int high, int step) {
         return rand.nextInt(low, high / step) * step;
     }
 
-    private int __randrange(int low, int high, int step) {
+    private static int __randrange(int low, int high, int step) {
         int r = rand.nextInt(high - low + 1);
         return r - r % step + low;
     }
 
 
-    private Set<Coordinate> neighbours(Coordinate coord, Tile target) {
+    public Set<Coordinate> neighbours(Coordinate coord, Tile target) {
         final var frontier = new HashSet<Coordinate>();
         if (coord.y() > 1 && maze[coord.y() - 2][coord.x()].equals(target)) {
             frontier.add(new Coordinate(coord.x(), coord.y() - 2));
@@ -57,6 +53,10 @@ public class Maze {
             frontier.add(new Coordinate(coord.x() + 2, coord.y()));
         }
         return frontier;
+    }
+
+    public Coordinate randomNeighbour(Coordinate coord, Tile target) {
+        return choice(neighbours(coord, target).toArray(Coordinate[]::new));
     }
 
     private void generate() {
@@ -79,19 +79,19 @@ public class Maze {
 
         int x, y;
         for (int i = 0; i < 2 * numTiles; i++) {
-            if (!Arrays.deepEquals(prev, maze)) {
-                prev = new Tile[HEIGHT][WIDTH];
-                for (int j = 0; j < HEIGHT; j++) {
-                    prev[j] = Arrays.copyOf(maze[j], WIDTH);
-                }
-                System.out.println("new maze @ iter" + i);
-                showMaze();
-                try (BufferedWriter f = new BufferedWriter(new FileWriter("C:\\Users\\leozh\\IdeaProjects\\cmpt213_a2\\src\\main\\resources\\frame_" + i + ".jpg"));) {
-                    var out = ImageIO.write(mazeToImage(maze), "png", new File("C:\\Users\\leozh\\Desktop\\test\\frame_" + i + ".jpg"));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
+//            if (!Arrays.deepEquals(prev, maze)) {
+//                prev = new Tile[HEIGHT][WIDTH];
+//                for (int j = 0; j < HEIGHT; j++) {
+//                    prev[j] = Arrays.copyOf(maze[j], WIDTH);
+//                }
+//                System.out.println("new maze @ iter" + i);
+//                showMaze();
+//                try (BufferedWriter f = new BufferedWriter(new FileWriter("C:\\Users\\leozh\\IdeaProjects\\cmpt213_a2\\src\\main\\resources\\frame_" + i + ".jpg"));) {
+//                    var out = ImageIO.write(mazeToImage(maze), "png", new File("C:\\Users\\leozh\\Desktop\\test\\frame_" + i + ".jpg"));
+//                } catch (Exception e) {
+//                    e.printStackTrace();
+//                }
+//            }
             if (i < numTiles) {
                 if (rand.nextBoolean()) {
                     x = choice(0, WIDTH - 1);
@@ -130,34 +130,23 @@ public class Maze {
 
     public Maze() {
         generate();
-        placeEntities();
-    }
-
-    private void placeEntities() {
-//        maze[1][1] = Tile.HUNTER; // top left
-//        maze[HEIGHT - 2][WIDTH - 2] = Tile.GUARDIAN; // bottom right
-//        maze[HEIGHT - 2][1] = Tile.GUARDIAN; // bottom left
-//        maze[1][WIDTH - 2] = Tile.GUARDIAN; // top right
-
-        // gen relic
-        int relicX, relicY;
-        do {
-            relicX = rand.nextInt(WIDTH);
-            relicY = rand.nextInt(HEIGHT);
-        } while (maze[relicY][relicX].equals(Tile.HUNTER) ||
-                maze[relicY][relicX].equals(Tile.WALL));
-        maze[relicY][relicX] = Tile.RELIC;
     }
 
     public Tile[][] getMaze() {
         return maze;
     }
 
-    public void showMaze() {
+    public void showMaze(List<Entity> entities) {
         for (int i = 0; i < HEIGHT; i++) {
             for (int j = 0; j < WIDTH; j++) {
-                var curr = maze[i][j].toString();
-                System.out.print((curr.equals(" ") ? " " : "■") + " ");
+                Coordinate here = Coordinate.at(j, i);
+                var special = entities.stream().filter(e -> e.getPosition().equals(here)).findAny();
+                if (special.isPresent()) {
+                    System.out.print(special.get().getTile() + " ");
+                } else {
+                    var curr = maze[i][j].toString();
+                    System.out.print((curr.equals(" ") ? " " : "■") + " ");
+                }
             }
             System.out.println();
         }

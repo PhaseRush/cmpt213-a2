@@ -1,36 +1,46 @@
 package ca.sfu.cmpt213.a2.model;
 
+import ca.sfu.cmpt213.a2.model.entity.Entity;
 import ca.sfu.cmpt213.a2.model.entity.Guardian;
 import ca.sfu.cmpt213.a2.model.entity.Hunter;
+import ca.sfu.cmpt213.a2.model.entity.Relic;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static ca.sfu.cmpt213.a2.model.Coordinate.*;
 import static ca.sfu.cmpt213.a2.model.Maze.HEIGHT;
 import static ca.sfu.cmpt213.a2.model.Maze.WIDTH;
 
 public class Game {
+    private static final Random rand = ThreadLocalRandom.current();
+    private static final Set<Coordinate> directions = Set.of(
+            at(-1, -1),     // up left
+            at(0, -1),      // up
+            at(1, -1),      // up right
+            at(-1, 0),      // left
+            at(1, 0),       // right
+            at(-1, 1),      // down left
+            at(0, 1),       // down
+            at(1, 1)        // down right
+    );
+
+    public static final Map<Input, Coordinate> CARDINALS = Map.of(
+            Input.UP, at(0, -1),            // up
+            Input.LEFT, at(-1, 0),          // left
+            Input.RIGHT, at(1, 0),          // right
+            Input.DOWN, at(0, 1)           // down
+    );
     private final Scanner sc;
     private Maze maze;
     private final Hunter hunter;
-    private final List<Guardian> guardians;
+    private final List<Entity> entities;
     private final boolean[][] discovered;
-
-    private final Map<Input, Coordinate> directions = Map.of(
-            Input.SENTINEL1, at(-1, -1),    // up left
-            Input.UP, at(0, -1),            // up
-            Input.SENTINEL2, at(1, -1),     // up right
-            Input.LEFT, at(-1, 0),          // left
-            Input.RIGHT, at(1, 0),          // right
-            Input.CHEAT, at(-1, 1),         // down left
-            Input.DOWN, at(0, 1),           // down
-            Input.REVEAL, at(1, 1)          // down, right
-    );
+    private int relicsLeft;
 
     public Game(Maze maze) {
         this.maze = maze;
+        this.relicsLeft = 3;
         this.sc = new Scanner(System.in);
 
 
@@ -42,20 +52,35 @@ public class Game {
         }
         for (int i = 0; i < WIDTH; i++) {
             this.discovered[0][i] = true;
-            this.discovered[HEIGHT - 1][0] = true;
+            this.discovered[HEIGHT - 1][i] = true;
         }
         reveal(at(1, 1));
         hunter = new Hunter(at(1, 1));
 
-        guardians = List.of(
+        entities = List.of(
+                hunter, // top left
+                new Relic(generateRelic()), // relic
                 new Guardian(at(WIDTH - 2, HEIGHT - 2)), // bottom right
                 new Guardian(at(1, HEIGHT - 2)), // bottom left
                 new Guardian(at(WIDTH - 2, 1))); // top right
+        entities.forEach(e -> maze.getMaze()[e.y()][e.x()] = e.getTile());
+    }
+
+    private Coordinate generateRelic() {
+        int relicX, relicY;
+        do {
+            relicX = rand.nextInt(WIDTH);
+            relicY = rand.nextInt(HEIGHT);
+        } while ((maze.getMaze()[relicY][relicX].equals(Tile.HUNTER) ||
+                maze.getMaze()[relicY][relicX].equals(Tile.WALL)) &&
+                (relicX == 1 && relicY == 1)); // do not spawn relic on hunter at start
+        maze.getMaze()[relicY][relicX] = Tile.RELIC;
+        return at(relicX, relicY);
     }
 
     private void reveal(Coordinate coord) {
         discovered[coord.y()][coord.x()] = true; // discover self
-        for (Coordinate delta : directions.values()) {
+        for (Coordinate delta : directions) {
             try {
                 discovered[coord.y() + delta.y()][coord.x() + delta.x()] = true;
             } catch (ArrayIndexOutOfBoundsException ignored) {
@@ -67,6 +92,14 @@ public class Game {
         final StringBuilder sb = new StringBuilder();
         for (int i = 0; i < HEIGHT; i++) {
             for (int j = 0; j < WIDTH; j++) {
+//                Coordinate here = Coordinate.at(j, i);
+//                var special = entities.stream().filter(e -> e.getPosition().equals(here)).findAny();
+//                if (special.isPresent()) {
+//                    System.out.print(special.get().getSymbol() + " ");
+//                } else {
+//                    var curr = maze[i][j].toString();
+//                    System.out.print((curr.equals(" ") ? " " : "■") + " ");
+//                }
                 Tile tile = maze.getMaze()[i][j];
                 if (tile.alwaysShow() || discovered[i][j]) {
                     sb.append(tile);
@@ -79,17 +112,18 @@ public class Game {
         System.out.println(sb);
     }
 
-    private enum Input {
+    public enum Input {
         REVEAL("M"),
         CHEAT("C"),
         UP("W"),
         LEFT("A"),
         DOWN("S"),
-        RIGHT("D"),
-        SENTINEL1(null),
-        SENTINEL2(null);
+        RIGHT("D");
 
         final String key;
+        static Input get(String value) {
+            return Arrays.stream(Input.values()).filter(input -> input.key.equals(value)).findAny().orElse(UP);
+        }
 
         Input(String d) {
             this.key = d;
@@ -111,32 +145,43 @@ public class Game {
                 (You must press enter after each move).""");
     }
 
-    private void moveHunter(Input direction) throws ArrayIndexOutOfBoundsException {
-        var desired = directions.get(direction);
-        maze.getMaze()[hunter.y() + desired.y()][hunter.x() + desired.x()] = Tile.HUNTER;
-        hunter.move(at(hunter.x() + desired.x(), hunter.y() + desired.y()));
+    public boolean checkCollisions() {
+        // check hunters overlap any guardian
+        if (entities.stream()
+                .filter(e -> (e instanceof Guardian))
+                .anyMatch(entity -> entity.getPosition().equals(hunter.getPosition()))) {
+            return true;
+        }
+        if (entities.stream()
+                .filter(e -> (e instanceof Relic))
+                .anyMatch(entity -> entity.getPosition().equals(hunter.getPosition()))) {
+            relicsLeft--;
+        }
+        return false;
     }
 
     public void play() {
         start();
-        while (sc.hasNext()) {
+        boolean gameOver = false;
+
+//        showHidden();
+        do {
             try {
-                var input = Input.valueOf(sc.nextLine());
+                maze.showMaze(entities);
+                var input = Input.get( sc.nextLine().toUpperCase());
                 switch (input) {
-                    case REVEAL -> maze.showMaze();
-                    case CHEAT -> System.out.println("todo cheat");
-                    case UP, LEFT, DOWN, RIGHT -> moveHunter(input);
+                    case REVEAL -> maze.showMaze(entities);
+                    case CHEAT -> relicsLeft = 1;
+//                    case UP, LEFT, DOWN, RIGHT -> moveHunter(input);
                 }
+                entities.forEach(e -> e.move(maze, input));
+                gameOver = checkCollisions();
             } catch (IllegalArgumentException e) {
                 System.out.println("Invalid option! Try again.");
             } catch (ArrayIndexOutOfBoundsException e) {
                 System.out.println("Invalid direction! Use WASD.");
-                continue;
             }
-            // move guardians
-//            guardians.forEach(guardian -> guardian.move());
-        }
 
-
+        } while (!gameOver);
     }
 }

@@ -1,24 +1,17 @@
 package ca.sfu.cmpt213.a2.textui;
 
+import ca.sfu.cmpt213.a2.model.Game;
 import ca.sfu.cmpt213.a2.model.Maze;
 
-import java.util.Arrays;
-
 public class UI {
-    private Maze maze;
+    private Game game;
 
-    public UI(Maze maze) {
-        this.maze = maze;
+    public UI() {
+        this.game = new Game(new Maze());
     }
 
-    public void showMaze() {
-        for (int i = 0; i < Maze.HEIGHT; i++) {
-//            System.out.println(Arrays.toString(maze.getMaze()[i]));
-            for (int j = 0; j < Maze.WIDTH; j++) {
-                System.out.print(maze.getMaze()[i][j] + " ");
-            }
-            System.out.println();
-        }
+    public void start() {
+        this.game.play();
     }
 
 }
